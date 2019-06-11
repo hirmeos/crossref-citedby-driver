@@ -1,0 +1,144 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from collections import defaultdict
+import csv
+from os import environ
+
+from bs4 import BeautifulSoup
+
+from logic import (
+    determine_timestamp,
+    get_options,
+    get_date_from_filename,
+    uri_schema_doi,
+)
+from utils import doi_to_id, set_token_auth
+
+
+XREF_DOI_PREFIX = environ['XREF_DOI_PREFIX']
+
+
+ARGS = [
+    {
+        'val': '--measure',
+        'dest': 'measure',
+        'action': 'store',
+        'default': None,
+        'help': 'Measure URI, e.g. '
+                'https://metrics.operas-eu.org/citations/crossref/v1',
+        'required': True,
+    }, {
+        'val': '--add-headers',
+        'dest': 'add_headers',
+        'action': 'store_true',
+        'default': [],
+        'help': 'Whether to print report headers',
+        'required': False,
+    }, {
+        'val': '--in_file',
+        'dest': 'in_file',
+        'action': 'store',
+        'help': 'File to read Crossref citation data from (XML format).',
+        'required': True,
+    }, {
+        'val': '--out_file',
+        'dest': 'out_file',
+        'action': 'store',
+        'help': 'CSV file to save output to (CSV format).',
+        'required': True,
+    }
+]
+
+HEADER = (
+    'measure_id',
+    'timestamp',
+    'work_uri',
+    'country_uri',
+    'event_uri',
+    'value',
+)
+
+
+def get_crossref_citations(cached_file):
+    """Extract raw data from Crossref citation XML for correct DOIs only.
+
+    Args:
+        cached_file (str): Name of XML file containing data from Crossref.
+
+    Returns:
+        dict: Each DOI that is cited and the citation entries for that DOI.
+    """
+
+    with open(cached_file, 'r') as f:
+        xml_data = BeautifulSoup(f.read(), 'xml')
+
+    relevant_entries = filter(
+        lambda x: x.attrs.get('doi', '').startswith(XREF_DOI_PREFIX),
+        xml_data.find_all('forward_link')
+    )
+
+    citations = defaultdict(list)
+    for entry in relevant_entries:
+        doi = entry.attrs.get('doi')
+        citations[doi].extend(entry.find_all('journal_cite'))
+        citations[doi].extend(entry.find_all('book_cite'))
+
+    return citations
+
+
+def resolve(cached_file):
+    """Extract citation information (for metrics) from Crossref XML.
+
+    Args:
+        cached_file (str): Name of XML file containing data from Crossref.
+
+    Returns:
+        Generator: Yields a tuple with citation data.
+    """
+
+    file_date = get_date_from_filename(cached_file)
+    citations = get_crossref_citations(cached_file)
+
+    if citations:
+        set_token_auth()
+
+    for doi, entries in citations.items():
+
+        for entry in entries:
+            cited_by = entry.find('doi').text
+            year = entry.find('year').text
+            timestamp = determine_timestamp(year, file_date)
+
+            for identifier in doi_to_id(uri_schema_doi(doi), timestamp):
+                uri = identifier['URI']
+                yield (timestamp, uri, cited_by, 1)
+
+
+def run(measure, in_file, out_file, add_headers):
+    """Process Crossref citations and write output to a csv file.
+
+    Args:
+        measure (str): Name given to the crossref citation mesaure.
+        in_file (str): Name of cached XML file containing data from Crossref.
+        out_file (str): Name of CSV file to save measures to.
+        add_headers (bool): Add headers to the CSV file if True.
+    """
+    hits = [_ for _ in resolve(in_file)]
+
+    if not hits:
+        return
+
+    with open(out_file, 'a+') as csv_file:
+        writer = csv.writer(csv_file)
+
+        if add_headers:
+            writer.writerow(HEADER)
+
+        for timestamp, doi, cited_by, value in hits:
+            writer.writerow((measure, timestamp, doi, '', cited_by, value))
+
+
+if __name__ == '__main__':
+    options = get_options(ARGS)
+    run(**vars(options))

@@ -6,7 +6,7 @@ import requests
 
 AUTH = None
 AUTH_API_ENDP = environ['AUTH_API_ENDP']
-JWT_DISABLED = environ['JWT_DISABLED'] in ('True', 'true')
+JWT_DISABLED = environ['JWT_DISABLED'].lower() == 'true'
 URI_API_ENDP = environ['URI_API_ENDP']
 URI_API_USER = environ['URI_API_USER']
 URI_API_PASS = environ['URI_API_PASS']

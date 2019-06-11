@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 CACHEDIR = getenv('CACHEDIR')
 OUTDIR = getenv('OUTDIR')
 MODES = json.loads(getenv('MODES'))
-REPROCESS_REPORTS = getenv('REPROCESS_REPORTS') == 'true'
+REPROCESS_REPORTS = getenv('REPROCESS_REPORTS', '').lower() == 'true'
 XREF_START_DATE = getenv('XREF_START_DATE')
 
 
@@ -56,14 +56,13 @@ def run():
             continue
 
         for i, m in enumerate(MODES):
-            # only include headers in first iteration
             cmd = (
                 f'./resolve_reports --measure {m["measure"]}'
                 f' --in_file {cache_file} --out_file {out_file}'
             ).split()
 
-            add_headers = ['--add-headers'] if i == 0 else []
-            cmd.extend(add_headers)
+            if i == 0:  # only include headers in first iteration
+                cmd.extend(['--add-headers'])
 
             subprocess.call(cmd)
 

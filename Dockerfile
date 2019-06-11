@@ -1,7 +1,8 @@
-FROM python:3.7
+FROM python:3.7-alpine
 
-RUN apt-get update && apt-get upgrade -y && \
-    pip install --upgrade pip
+RUN apk add --update --no-cache \
+    g++ \
+    libxslt-dev
 
 WORKDIR /usr/src/app
 RUN mkdir output cache

@@ -1,0 +1,63 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from os import environ
+import sys
+
+import requests
+
+from logic import get_options
+
+
+XREF_USERNAME = environ['XREF_USERNAME']
+XREF_PASSWORD = environ['XREF_PASSWORD']
+XREF_DOI_PREFIX = environ['XREF_DOI_PREFIX']
+
+ARGS = [
+    {
+        'val': '--date',
+        'dest': 'date',
+        'action': 'store',
+        'help': 'Date query, as YYYY-MM-DD.',
+        'required': True,
+    }, {
+        'val': '--out_file',
+        'dest': 'out_file',
+        'action': 'store',
+        'help': 'File to save output to.',
+        'required': True,
+    }
+]
+
+
+def print_cited_by_csv(search_date, cached_file):
+    """Fetch citation XML from Crossref and save to a cached file."""
+
+    params = {
+        'usr': XREF_USERNAME,
+        'pwd': XREF_PASSWORD,
+        'doi': XREF_DOI_PREFIX,
+        'startDate': search_date,
+        'endDate': search_date
+    }
+
+    api_url = 'https://doi.crossref.org/servlet/getForwardLinks'
+    response = requests.get(api_url, params=params)
+
+    if response.status_code != 200:
+        sys.stderr.write(
+            f'Could not retrieve cited-by citations ({response.reason})'
+            f' - Request parameters: {params}); url: {api_url}'
+        )
+    else:
+        with open(cached_file, 'w') as w:
+            w.write(response.text)
+
+
+def run():
+    options = get_options(ARGS)
+    print_cited_by_csv(options.date, options.out_file)
+
+
+if __name__ == '__main__':
+    run()
